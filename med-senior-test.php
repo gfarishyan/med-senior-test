@@ -66,7 +66,10 @@ class MedSeniorTest {
     
   }
   
-  
+  /**
+   * Sync data from remote.
+   * This will not delete local record if it deleted from remote.
+   */
   public function remote_sync_data() {
     
     global $wpdb;
@@ -119,8 +122,8 @@ class MedSeniorTest {
           'capital' => $item['capital'],
           'region' => $item['region'],
           'population' => $item['population'],
-          'timezones' => implode(',', $item['timezones']),
-          'languages' => implode(',', array_column($item['languages'], 'name')),
+          'timezones' => implode(', ', $item['timezones']),
+          'languages' => implode(', ', array_column($item['languages'], 'name')),
        );
       
       if (!empty($row['row_hash'])) {
@@ -157,12 +160,21 @@ class MedSeniorTest {
     ));
   }
   
+  /**
+   * Validate Settings.
+   */
   public function validateSettings($input) {
+    $has_errors = false;
+    
+    if (!ctype_digit($input['nrows_per_page']) || (ctype_digit($input['nrows_per_page']) && $input['nrows_per_page'] <=0 ) ) {
+      
+      add_settings_error('med-senior-test', 'nrows_per_page', __('Specify valid value'), 'error');
+    }
     return $input;
   }
   
   public function nrows_settings() {
-    print sprintf('<input type="text" name="med_senior_test[nrows_per_page]" value="%s">', esc_attr($this->options['nrows_per_page']));
+    print sprintf('<input type="text" name="med_senior_test[nrows_per_page]" value="%s">', sanitize_text_field($this->options['nrows_per_page']));
   }
   
   public function section_text() {
@@ -181,8 +193,6 @@ class MedSeniorTest {
   
   public function admin_menu() {
     $page_title = $menu_title = __('Med Senior test', MED_SENIOR_TEST_TEXT_DOMAIN);
-    
-    //add_menu_page($page_title, $menu_title, 'manage_options', 'med-senior-test', '', '', 6);
     add_options_page($page_title, $menu_title, 'manage_options', "med-senior-test", array($this, 'render_settings_page'));
   }
   
@@ -190,6 +200,16 @@ class MedSeniorTest {
   public function render_settings_page() {
     print sprintf('<div class="wrap">
   <h2>%s</h2>', esc_html(__('General Settings', MED_SENIOR_TEST_TEXT_DOMAIN)));
+  
+  print '<p>' . nl2br(__("use <b>[med-senior-test]</b> shortcode to render data table.\n 
+  Available attributes.
+  <ul>
+    <li><b>columns</b>: Comma seperated list of db columns. (existing columns id,name,capital,region,population,timezones,languages)</li>
+    <li><b>column_names</b>: Comma seperated list of column names. The order of columns will be preserved according input.</li>
+    <li><b>nrows</b>: Number of initial rows to display.</li>
+    <li><b>id</b>: Specify dataTableId if you need your own.</li>
+    <li><b>sorts</b>: Comma seperated list of columns that will be sortable. add | character to specify direction asc or desc. Default asc.</li>
+  </ul>", MED_SENIOR_TEST_TEXT_DOMAIN)) . '</p>';
   
   settings_errors();
   print '<form method="post" action="options.php">';
@@ -204,7 +224,7 @@ class MedSeniorTest {
     wp_register_script('datatableset-js', '//cdn.datatables.net/1.10.22/js/jquery.dataTables.min.js', array(
       'jquery'
      ), null, true);
-    //wp_register_style('datatableset-css', '//cdn.datatables.net/1.10.22/css/jquery.dataTables.min.css');
+    wp_register_style('datatableset-css', '//cdn.datatables.net/1.10.22/css/jquery.dataTables.min.css');
     wp_register_script('med-senior-test-js', plugins_url('js/med-senior-test.js', __FILE__), array(
       'datatableset-js'
     ), null, true);
@@ -233,7 +253,7 @@ class MedSeniorTest {
     $shortcode_atts = shortcode_atts(array(
       'rows_count' => 10,
       'id' => 'datatable-' . $target,
-      'sorts' => 'sorts',
+      'sorts' => '',
       'columns' => 'id,name,capital,region,population,timezones,language',
       'search' => 'name,capital,region,population,timezones,languages',
       'columnNames' => 'Id,Name,Capital,Region,Population,Timezones,Languages'
@@ -248,8 +268,34 @@ class MedSeniorTest {
     $settings[$target]['columns'] = $columns;
     $settings[$target]['id'] = '#' . $shortcode_atts['id'];
     $wrapper_class = $shortcode_atts['id'] . '-wrapper';
+    $settings[$target]['sorts'] = [];
+    
+    if (!empty($shortcode_atts['sorts'])) {
+      $sorts = array();
+      //check indexes of sorts
+      foreach (explode(',', $shortcode_atts['sorts']) as $sort_item) {
+        @list($col, $direction) = explode('|', $sort_item);
+        if ( ($index = array_search($col, $columns)) === false) {
+          continue;
+        }
+        
+        $direction = trim($direction);
+        $direction = !empty($direction) ? strtolower($direction) : 'asc';
+        
+        if (!in_array($direction, ['asc', 'desc'])) {
+          continue;
+        }
+        
+        $sorts[] = array($index, $direction);
+      }
+      
+      if (!empty($sorts)) {
+        $settings[$target]['sorts'] = $sorts;
+      }
+    }
     
     wp_enqueue_script('med-senior-test-js');
+    wp_enqueue_style('datatableset-css');
     wp_localize_script('med-senior-test-js', 'medSeniorTestSettings', array(
       'ajax_url' => admin_url('admin-ajax.php'),
       'items' => $settings,
@@ -272,24 +318,105 @@ class MedSeniorTest {
   }
   
   public function retrieve_data() {
-    $data = [
-      (object)['id' => 1,
-       'name' => 'name',
-       'capital' => 'demo', 
-       'region' => 15, 
-       'population' => 25, 
-       'timezones' => 35, 
-       'language' => 'en, fr'
-      ],
-    ];
+    global $wpdb;
     
-    $num_records = sizeof($data);
-    $filtered_records_count = $num_records;
+    $allowed_fields =  array(
+      'id' => 'id', 
+      'name' => 'name', 
+      'region' => 'region', 
+      'capital' => 'capital', 
+      'population' => 'population', 
+      'timezones' => 'timezones', 
+      'languages' => 'languages'
+     );
+    
+    $filtered_total_items = $total_items = $wpdb->get_var("SELECT COUNT(*) as count FROM " . $wpdb->prefix . self::$table_name);
+    $where_params = [];
+    $where = [];
+    
+    $sql = "SELECT id, name, region, capital, population, timezones, languages FROM " . $wpdb->prefix . self::$table_name;
+    $args = array();
+    
+    $defaults = array(
+      'limit' => $this->options['nrows_per_page'],
+      'start' => 0,
+    );
+    
+    if (isset($_POST)) {
+      $options = array(
+        'options' => array(
+        'min_range' => 1,
+      ));
+      
+      if (filter_input(INPUT_POST, 'length', FILTER_VALIDATE_INT, $options)) {
+        $defaults['limit'] = $_POST['length'];
+      }
+      
+      $options = array(
+        'options' => array(
+        'min_range' => 0,
+      ));
+      
+      if (filter_input(INPUT_POST, 'start', FILTER_VALIDATE_INT, $options)) {
+        $defaults['start'] = $_POST['start'];
+      }
+      
+      $columns = isset($_POST['columns']) ? (array)$_POST['columns'] : [];
+      $orders = isset($_POST['order']) ? (array) $_POST['order'] : [];
+      
+      $orderby = array();
+      
+      if (!empty($orders)) {
+        foreach ($orders as $order_item) {
+          if (!empty($order_item['column'])) {
+            if (!empty($columns[$order_item['column']]['data']) && !empty($allowed_fields[$columns[$order_item['column']]['data']])) {
+              $orderby[] = $allowed_fields[$columns[$order_item['column']]['data']] . ' ' . $order_item['dir'];
+            }
+          }
+        }
+      }
+      
+      if (!empty($_POST['search']['value'])) {
+        $search = preg_replace('/\s+/', ' ', $_POST['search']['value']);
+        $search = trim($search);
+        if (!empty($search)) {
+          $allowed_fields_col = implode(', ', $allowed_fields);
+          foreach (explode(" ", $search)  as $search_item) {
+            $where[] = sprintf('CONCAT_WS(" ", %s) LIKE %s', $allowed_fields_col, '%s');
+            $where_params[] = '%'. $search_item . '%';
+          }
+        }
+      }
+    }
+    
+    $query_params = array();
+    
+    if (!empty($where)) {
+      $where_str = implode(' OR ', $where);
+      $sql .= ' WHERE ' . $where_str ;
+      $query_params = array_merge($query_params, $where_params);
+      $filtered_total_items = $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . $wpdb->prefix . self::$table_name .  ' WHERE ' . $where_str, $where_params));
+    }
+    
+    $query_params = array_merge($query_params, array(
+      $defaults['start'], 
+      $defaults['limit']
+    ));
+   
+    
+    if (!empty($orderby)) {
+      $sql .= ' ORDER BY ' . implode(',', $orderby);
+    }
+   
+    $sql .= ' LIMIT %d,%d';
+      
+    $query = $wpdb->prepare($sql, $query_params);
+    $data = $wpdb->get_results($query, OBJECT);
     
     $return = array(
-      'draw' => 1,
-      'recordsTotal' => $num_records,
-      'recordsFiltered' => $filtered_records_count,
+      'draw' => $_POST['draw'],
+      'recordsTotal' => $total_items,
+      'recordsFiltered' => $filtered_total_items,
       'data' => $data
     );
    
