@@ -41,10 +41,11 @@ class MedSeniorTest {
   
   
   public function register_scripts() {
-    wp_register_script('datatableset-js', '//cdn.datatables.net/1.10.22/js/jquery.dataTables.min.js');
-    wp_register_style('datatableset-css', '//cdn.datatables.net/1.10.22/css/jquery.dataTables.min.css');
+    wp_register_script('datatableset-js', '//cdn.datatables.net/1.10.22/js/jquery.dataTables.min.js', array(
+      'jquery'
+     ), null, true);
+    //wp_register_style('datatableset-css', '//cdn.datatables.net/1.10.22/css/jquery.dataTables.min.css');
     wp_register_script('med-senior-test-js', plugins_url('js/med-senior-test.js', __FILE__), array(
-      'jquery',
       'datatableset-js'
     ), null, true);
   }
@@ -66,8 +67,8 @@ class MedSeniorTest {
     $target++;
     
     $shortcode_atts = shortcode_atts(array(
-      'target' => '#datatable-' . $target,
       'rows_count' => 10,
+      'id' => 'datatable-' . $target,
       'sorts' => 'sorts',
       'columns' => 'id,name,capital,region,population,timezones,language',
       'search' => 'name,capital,region,population,timezones,languages',
@@ -80,12 +81,9 @@ class MedSeniorTest {
     
     //convert comma list to array
     $columns = explode(',', $shortcode_atts['columns']);
-    array_walk($columns, function(&$item){
-      $item = (object) array("data" => $item);
-    });
     $settings[$target]['columns'] = $columns;
-    $settings[$target]['target'] = $shortcode_atts['target'];
-    $wrapper_class = ltrim($shortcode_atts['target'], '#.') . '-wrapper';
+    $settings[$target]['id'] = '#' . $shortcode_atts['id'];
+    $wrapper_class = $shortcode_atts['id'] . '-wrapper';
     
     wp_enqueue_script('med-senior-test-js');
     wp_localize_script('med-senior-test-js', 'medSeniorTestSettings', array(
@@ -98,21 +96,40 @@ class MedSeniorTest {
       $thead .= sprintf('<th>%s</th>', esc_html($name));
     }
     
-    $data = sprintf('<div class="%s"><table id="%s">
+    $data = sprintf('<div class="%s">
+    <table id="%s" class="display">
       <thead>
         <tr>%s</tr>
       </thead>
       <tbody>
       </tbody>
-      </table>', $wrapper_class, $shortcode_atts['target'], $thead);
+      </table></div>', $wrapper_class, $shortcode_atts['id'], $thead);
     print $data;
   }
   
   public function retrieve_data() {
     $data = [
-      ['demo', 15, 25, 35, 45, 55],
+      (object)['id' => 1,
+       'name' => 'name',
+       'capital' => 'demo', 
+       'region' => 15, 
+       'population' => 25, 
+       'timezones' => 35, 
+       'language' => 'en, fr'
+      ],
     ];
-    print json_encode($data);
+    
+    $num_records = sizeof($data);
+    $filtered_records_count = $num_records;
+    
+    $return = array(
+      'draw' => 1,
+      'recordsTotal' => $num_records,
+      'recordsFiltered' => $filtered_records_count,
+      'data' => $data
+    );
+   
+    print json_encode($return);
     wp_die();
   }
 }
