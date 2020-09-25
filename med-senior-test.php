@@ -69,6 +69,13 @@ class MedSeniorTest {
   
   
   public function remove_data() {
+    check_ajax_referer('med_senior_test_remove_data', 'nonce');
+    if (!current_user_can( 'edit_posts' )) {
+      wp_send_json_error();
+    }
+    
+    
+    
     global $wpdb;
     $wpdb->query("DELETE FROM  " . $wpdb->prefix . self::$table_name);
     wp_send_json_success();
@@ -79,6 +86,10 @@ class MedSeniorTest {
    * This will not delete local record if it deleted from remote.
    */
   public function remote_sync_data() {
+    check_ajax_referer('med_senior_test_data_sync_data', 'nonce');
+    if (!current_user_can( 'edit_posts' )) {
+      wp_send_json_error();
+    }
     
     global $wpdb;
     //check do we have data to process.
@@ -192,7 +203,10 @@ class MedSeniorTest {
   public function section_data_import() {
     $settings = array(
       'ajax_url' => admin_url('admin-ajax.php'),
+      'sync_nonce' => wp_create_nonce('med_senior_test_data_sync_data'),
+      'remove_nonce' => wp_create_nonce('med_senior_test_remove_data'),
     );
+    
     wp_enqueue_script('med-senior-test-admin');
     wp_localize_script('med-senior-test-admin', 'medSeniorTestAdminSettings', $settings);
     $btn_text = __('Sync Data', MED_SENIOR_TEST_TEXT_DOMAIN);

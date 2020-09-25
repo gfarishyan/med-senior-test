@@ -13,6 +13,7 @@ jQuery( function( $ ) {
         type: 'POST',
         data: {
           action: 'med_senior_test_remove_data',
+          nonce: medSeniorTestAdminSettings.remove_nonce
         },
         dataType: 'json',
         success: function(resp) {
@@ -31,6 +32,7 @@ jQuery( function( $ ) {
       type: 'POST',
       data: {
         action: 'med_senior_test_data_sync_data',
+        nonce: medSeniorTestAdminSettings.sync_nonce,
       },
       dataType: 'json',
       success: function(resp) {
