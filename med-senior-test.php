@@ -18,6 +18,7 @@ define('MED_SENIOR_TEST_TEXT_DOMAIN', 'med-senior-test');
 
 class MedSeniorTest {
   public static $instance;
+  protected static $table_name = 'med_senior_test_countries';
   
   public function __construct() {
     $this->init();
@@ -132,6 +133,33 @@ class MedSeniorTest {
     print json_encode($return);
     wp_die();
   }
+  
+  
+  public static function setup() {
+    global $wpdb;
+    $table = $wpdb->prefix . self::$table_name;
+    $charset = $wpdb->get_charset_collate();
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    $sql = "CREATE TABLE IF NOT EXISTS `$table` (
+    `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `name` varchar(255) NOT NULL,
+    `capital` varchar(255) NOT NULL DEFAULT '',
+    `region` varchar(255) NOT NULL DEFAULT '',
+    `population` int(11) UNSIGNED DEFAULT '0',
+    `timezones` varchar(255) NOT NULL DEFAULT '',
+    `languages` varchar(255) NOT NULL DEFAULT '',
+    PRIMARY KEY (`id`)
+    ) DEFAULT CHARACTER SET = utf8 DEFAULT COLLATE utf8_general_ci;";
+    
+    require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+    dbDelta( $sql );
+  }
 }
 
+register_activation_hook( __FILE__, array('MedSeniorTest', 'setup'));
+
+
 MedSeniorTest::getInstance();
+
+
