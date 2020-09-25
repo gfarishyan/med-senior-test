@@ -43,6 +43,7 @@ class MedSeniorTest {
       add_action('admin_init', array($this, 'admin_init'));
       add_action('admin_menu', array($this, 'admin_menu'));
       add_action('wp_ajax_med_senior_test_data_sync_data', array($this, 'remote_sync_data'));
+      add_action('wp_ajax_med_senior_test_remove_data', array($this, 'remove_data'));
     }
     //add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
   }
@@ -64,6 +65,13 @@ class MedSeniorTest {
       __('Data Import', MED_SENIOR_TEST_TEXT_DOMAIN), 
       array($this, 'section_data_import'),  'med-senior-test');
     
+  }
+  
+  
+  public function remove_data() {
+    global $wpdb;
+    $wpdb->query("DELETE FROM  " . $wpdb->prefix . self::$table_name);
+    wp_send_json_success();
   }
   
   /**
@@ -188,7 +196,9 @@ class MedSeniorTest {
     wp_enqueue_script('med-senior-test-admin');
     wp_localize_script('med-senior-test-admin', 'medSeniorTestAdminSettings', $settings);
     $btn_text = __('Sync Data', MED_SENIOR_TEST_TEXT_DOMAIN);
-    print sprintf('<button class="button button-secondary med-senior-test-sync-data" data-btn-text="%s">%s</button>', esc_attr($btn_text), esc_html($btn_text));
+    print "<p>" . sprintf('<button class="button button-secondary med-senior-test-sync-data" data-btn-text="%s">%s</button>', esc_attr($btn_text), esc_html($btn_text)) . '</p>';
+    $btn_text = __('Clear Data', MED_SENIOR_TEST_TEXT_DOMAIN);
+    print "<p>" . sprintf('<button class="button button-danger med-senior-test-remove-data">%s</button>', esc_html($btn_text)) . '</p>';
   }
   
   public function admin_menu() {
